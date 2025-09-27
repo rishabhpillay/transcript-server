@@ -41,10 +41,11 @@ router.post('/chunk', upload.single('chunk'), async (req, res) => {
     const { publicId } = await uploadAudio(req.file.buffer, {
       uploadId,
       sequenceId: parsed.sequenceId,
-      mime: parsed.mime,
+      // Prefer actual incoming file type if provided by multer
+      mime: req.file.mimetype || parsed.mime,
     });
 
-    const diarized = await transcribeAndDiarize(req.file.buffer, parsed.mime);
+    const diarized = await transcribeAndDiarize(req.file.buffer, req.file.mimetype || parsed.mime);
     rec.audio.push({ sq: parsed.sequenceId, publicId, sequenceId: parsed.sequenceId });
     rec.transcript.push(...diarized.text);
 

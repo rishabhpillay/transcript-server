@@ -18,22 +18,45 @@ export async function uploadAudio(
   const folder = `audio_chunks/${options.uploadId}`;
   const public_id = `${options.sequenceId}`;
 
-  const res = await new Promise<any>((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        resource_type: 'video',
-        folder,
-        public_id,
-        format: options.mime?.includes('webm') ? 'webm' : undefined,
-      },
-      (error, result) => {
+  const tryUpload = (cloudinaryOptions: Record<string, any>) =>
+    new Promise<any>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(cloudinaryOptions, (error, result) => {
         if (error) return reject(error);
         resolve(result);
-      }
-    );
-    uploadStream.end(buffer);
-  });
+      });
+      uploadStream.end(buffer);
+    });
 
-  return { publicId: res.public_id as string };
+  // Prefer auto detection; map common mimes to format hints
+  const formatHint = options.mime?.includes('webm')
+    ? 'webm'
+    : options.mime?.includes('m4a')
+    ? 'm4a'
+    : options.mime?.includes('aac')
+    ? 'aac'
+    : options.mime?.includes('mp3')
+    ? 'mp3'
+    : options.mime?.includes('wav')
+    ? 'wav'
+    : undefined;
+
+  try {
+    const res = await tryUpload({
+      resource_type: 'auto',
+      folder,
+      public_id,
+      format: formatHint,
+      allowed_formats: ['webm', 'm4a', 'aac', 'mp3', 'wav', 'ogg'],
+    });
+    return { publicId: res.public_id as string };
+  } catch (err: any) {
+    const msg = String(err?.message || err);
+    if (msg.includes('Unsupported video format') || msg.includes('Unsupported')) {
+      // Fallback to raw so we can store bytes regardless of media support
+      const res = await tryUpload({ resource_type: 'raw', folder, public_id });
+      return { publicId: res.public_id as string };
+    }
+    throw err;
+  }
 }
 
