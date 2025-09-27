@@ -1,5 +1,5 @@
-import { env } from '../config/env';
-import type { TranscriptLine } from '../types/shared';
+import { env } from '../config/env.js';
+import type { TranscriptLine } from '../types/shared.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function summarizeAndActions(

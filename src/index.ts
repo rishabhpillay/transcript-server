@@ -1,9 +1,9 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { initMongo } from './db/mongo';
-import { env } from './config/env';
-import ingestRouter from './http/ingest.routes';
+import { initMongo } from './db/mongo.js';
+import { env } from './config/env.js';
+import ingestRouter from './http/ingest.routes.js';
 
 // centralized logger provides consistent formatting
 

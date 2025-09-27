@@ -1,4 +1,4 @@
-import { env } from '../config/env';
+import { env } from '../config/env.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export interface DiarizedText {

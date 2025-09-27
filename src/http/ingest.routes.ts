@@ -2,10 +2,10 @@ import { Router } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import Recording from '../models/Recording';
-import { uploadAudio } from '../services/cloudinary';
-import { transcribeAndDiarize } from '../services/gemini';
-import { summarizeAndActions } from '../services/summary';
+import Recording from '../models/Recording.js';
+import { uploadAudio } from '../services/cloudinary.js';
+import { transcribeAndDiarize } from '../services/gemini.js';
+import { summarizeAndActions } from '../services/summary.js';
 
 const router = Router();
 const upload = multer();

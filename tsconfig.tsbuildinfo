@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/config/env.ts","./src/db/mongo.ts","./src/http/ingest.routes.ts","./src/models/recording.ts","./src/services/cloudinary.ts","./src/services/gemini.ts","./src/services/summary.ts","./src/types/shared.ts"],"version":"5.9.2"}
