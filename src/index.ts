@@ -10,8 +10,14 @@ import ingestRouter from './http/ingest.routes.js';
 async function main() {
   await initMongo();
   const app = express();
-  app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
+  app.use(cors({ origin: '*', credentials: true }));
   app.use(express.json({ limit: '5mb' }));
+
+  // Set a higher timeout for all requests (e.g., 10 minutes)
+  app.use((req, res, next) => {
+    res.setTimeout(600000); 
+    next();
+  });
 
   app.use('/api/ingest', ingestRouter);
 

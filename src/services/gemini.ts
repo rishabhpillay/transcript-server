@@ -7,7 +7,7 @@ export interface DiarizedText {
 
 const genAI = env.GEMINI_API_KEY ? new GoogleGenerativeAI(env.GEMINI_API_KEY) : undefined;
 
-export async function transcribeAndDiarize(buffer: Buffer, mime?: string): Promise<DiarizedText> {
+export async function transcribeAndDiarize(buffer: Buffer, mime?: string, chunkStartTime?: number, recordingStartTime?: Date): Promise<DiarizedText> {
   if (!genAI) {
     throw new Error('GEMINI_API_KEY missing');
   }
@@ -66,11 +66,28 @@ Return only JSON with this schema:
     };
 
     const lines: DiarizedText['text'] = (parsed.transcript || [])
-      .map((item) => ({
-        date_time: now,
-        speaker: item.speaker || 'Speaker 1',
-        text: typeof item.text === 'string' ? item.text : '',
-      }))
+      .map((item) => {
+        // Calculate proper timestamp based on audio position
+        let timestamp = now;
+        if (item.start_ms !== undefined && chunkStartTime !== undefined && recordingStartTime) {
+          // Calculate absolute timestamp: recording start + chunk offset + segment offset
+          const totalOffsetMs = (chunkStartTime * 1000) + item.start_ms;
+          timestamp = new Date(recordingStartTime.getTime() + totalOffsetMs).toISOString();
+        } else if (item.start_ms !== undefined && chunkStartTime !== undefined) {
+          // Fallback: use chunk start time + segment offset
+          const audioTimeInSeconds = chunkStartTime + (item.start_ms / 1000);
+          timestamp = new Date(audioTimeInSeconds * 1000).toISOString();
+        } else if (item.start_ms !== undefined) {
+          // If no chunk start time provided, use relative time from start of recording
+          timestamp = new Date(item.start_ms).toISOString();
+        }
+        
+        return {
+          date_time: timestamp,
+          speaker: item.speaker || 'Speaker 1',
+          text: typeof item.text === 'string' ? item.text : '',
+        };
+      })
       .filter((l) => l.text.trim().length > 0);
 
     if (lines.length === 0) {

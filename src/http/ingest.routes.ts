@@ -45,7 +45,11 @@ router.post('/chunk', upload.single('chunk'), async (req, res) => {
       mime: req.file.mimetype || parsed.mime,
     });
 
-    const diarized = await transcribeAndDiarize(req.file.buffer, req.file.mimetype || parsed.mime);
+    // Calculate chunk start time based on sequence and recording start time
+    // For now, assume each chunk is approximately 30 seconds
+    const chunkStartTime = (parsed.sequenceId - 1) * 30; // seconds from start of recording
+    
+    const diarized = await transcribeAndDiarize(req.file.buffer, req.file.mimetype || parsed.mime, chunkStartTime, rec.createdAt);
     rec.audio.push({ sq: parsed.sequenceId, publicId, sequenceId: parsed.sequenceId });
     rec.transcript.push(...diarized.text);
 
@@ -66,7 +70,7 @@ router.post('/chunk', upload.single('chunk'), async (req, res) => {
         uploadId,
       });
     }
-    return res.json({ ok: true, uploadId, sequenceId: parsed.sequenceId });
+    return res.json({ success: true, uploadId, sequenceId: parsed.sequenceId });
   } catch (err: any) {
     return res.status(400).json({ message: err?.message || 'Bad request' });
   }
