@@ -9,6 +9,7 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -b",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prestart": "npm run build",
     "start": "node dist/index.js",
     "setup-env": "cp -n .env.example .env || true"
   },
