@@ -10,7 +10,7 @@ import ingestRouter from './http/ingest.routes';
 async function main() {
   await initMongo();
   const app = express();
-  app.use(cors({ origin: [env.CLIENT_ORIGIN, 'http://localhost:8081'], credentials: true }));
+  app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
   app.use(express.json({ limit: '5mb' }));
 
   app.use('/api/ingest', ingestRouter);
