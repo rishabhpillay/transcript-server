@@ -15,6 +15,7 @@
     "setup-env": "cp -n .env.example .env || true"
   },
   "dependencies": {
+    "@google/genai": "^1.21.0",
     "@google/generative-ai": "^0.17.0",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.5",

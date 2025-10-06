@@ -86,5 +86,74 @@ router.get('/recordings', async (_req, res) => {
   }
 });
 
+
+/**
+ * NEW: Single-shot transcription API
+ * POST /api/ingest/transcribe
+ * multipart/form-data:
+ *   - audio: (file) required
+ *   - mime:  (string) optional, e.g. audio/webm, audio/m4a
+ *
+ * Response 200:
+ * {
+ *   transcript: Array<{ date_time: string; speaker: string; text: string; start_ms?: number; end_ms?: number; notes?: string }>,
+ *   summary: string,
+ *   action: string[]
+ * }
+ */
+router.post('/transcribe', upload.single('audio'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'Missing audio file (field name: audio)' });
+
+    const mime = (req.file.mimetype || (req.body?.mime as string) || 'audio/webm') as string;
+
+    // Call Gemini for transcription + diarization
+    const recordingStart = new Date();
+    const diarized = await transcribeAndDiarize(
+      req.file.buffer,
+      mime,
+      0,                 // chunkStartTimeSec (0 for one-shot)
+      recordingStart     // recordingStartTime
+    );
+
+    // Support both shapes we've used before:
+    // - diarized.text: [{ date_time, speaker, text, start_ms?, end_ms?, notes? }]
+    // - diarized.transcript: [{ speaker, text, start_ms?, end_ms?, notes? }]
+    const nowIso = new Date().toISOString();
+    const rawItems: any[] = Array.isArray((diarized as any)?.text)
+      ? (diarized as any).text
+      : Array.isArray((diarized as any)?.transcript)
+      ? (diarized as any).transcript
+      : [];
+
+    const transcript = rawItems.map((seg) => {
+      const speaker = seg.speaker || 'Speaker 1';
+      const text = seg.text || '';
+      const start_ms = typeof seg.start_ms === 'number' ? seg.start_ms : undefined;
+
+      let date_time = seg.date_time || nowIso;
+      if (!seg.date_time && typeof start_ms === 'number') {
+        date_time = new Date(recordingStart.getTime() + start_ms).toISOString();
+      }
+
+      return {
+        date_time,
+        speaker,
+        text,
+        start_ms: seg.start_ms,
+        end_ms: seg.end_ms,
+        notes: seg.notes || '',
+      };
+    });
+
+    const { summary, action } = await summarizeAndActions(transcript);
+
+    return res.status(200).json({ transcript, summary, action });
+  } catch (err: any) {
+    return res.status(500).json({ message: err?.message || 'Transcription failed' });
+  }
+});
+
+
 export default router;
 
