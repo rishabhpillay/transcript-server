@@ -17,7 +17,7 @@ const AudioItemSchema = new Schema(
   {
     sq: { type: Number },
     publicId: { type: String },
-    secure_url: { type: String, required: false },
+    secureUrl: { type: String, required: false },
     sequenceId: { type: Number },
     assetId: { type: String, required: false },
     bytes: { type: Number, required: false },
