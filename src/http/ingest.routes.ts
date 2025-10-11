@@ -80,7 +80,7 @@ router.post('/chunk', upload.single('chunk'), async (req, res) => {
 router.post('/recordings', async (req, res) => {
   try {
     const { uid } = (req.body ?? {}) as { uid?: string };
-    console.log(req.body);
+    console.log({req});
     
     if (!uid) return res.status(400).json({ message: 'uid is required' });
 
