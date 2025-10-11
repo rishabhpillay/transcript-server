@@ -2,8 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import User from '../models/User.js';
 
 export const checkUser = async (req: Request, res: Response, next: NextFunction) => {
-  const { uid } = req.body;
-  console.log({req});
+  const uid = req.user;
+  console.log({uid});
   
 
   if (!uid) {
