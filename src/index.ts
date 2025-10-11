@@ -22,8 +22,8 @@ async function main() {
     next();
   });
 
-  app.use('/api/ingest',checkUser, ingestRouter);
-  app.use('/api/gemini',checkUser, geminiRouter);
+  app.use('/api/ingest', ingestRouter);
+  app.use('/api/gemini', geminiRouter);
   app.use('/api/user', userRouter);
 
   app.listen(env.PORT, () => {

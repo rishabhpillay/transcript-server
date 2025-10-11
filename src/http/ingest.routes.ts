@@ -77,16 +77,16 @@ router.post('/chunk', upload.single('chunk'), async (req, res) => {
 });
 
 // GET /api/ingest/recordings - list all recordings (newest first)
-router.get('/recordings', async (req, res) => {
+router.post('/recordings', async (req, res) => {
   try {
-    const { uid } = req.body;
+    const {uid} = req.body;
+    if (!uid) return res.status(400).json({ message: 'uid is required' });
     const recordings = await Recording.find({uid}).sort({ createdAt: -1 }).lean();
     return res.json(recordings);
   } catch (err: any) {
     return res.status(500).json({ message: err?.message || 'Failed to fetch recordings' });
   }
 });
-
 
 /**
  * NEW: Single-shot transcription API

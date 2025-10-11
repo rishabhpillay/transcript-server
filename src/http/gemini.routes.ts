@@ -62,8 +62,12 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded." });
     }
+
     const parsed = metaSchema.parse(req.body);
+
     const uid = parsed.uid;
+    if (!uid) return res.status(400).json({ message: 'uid is required' });
+
     const uploadId = parsed.uploadId ?? uuidv4();
     const sequenceId = parsed.sequenceId;
     const lastChunk = !!parsed.lastChunk;
