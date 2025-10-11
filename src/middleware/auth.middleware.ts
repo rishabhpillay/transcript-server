@@ -3,6 +3,8 @@ import User from '../models/User.js';
 
 export const checkUser = async (req: Request, res: Response, next: NextFunction) => {
   const { uid } = req.body;
+  console.log({req});
+  
 
   if (!uid) {
     return res.status(400).json({ message: 'UID is required' });
