@@ -2,8 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import User from '../models/User.js';
 
 export const checkUser = async (req: Request, res: Response, next: NextFunction) => {
-  const uid = req.user;
-  console.log({uid});
+const uid = req.user?.uid;   // <-- this is the Firebase UID
+console.log('req.user:', req.user);
+console.log('uid:', uid);
   
 
   if (!uid) {
