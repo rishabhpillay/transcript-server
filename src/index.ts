@@ -7,7 +7,6 @@ import ingestRouter from './http/ingest.routes.js';
 import geminiRouter from './http/gemini.routes.js';
 
 import userRouter from './http/user.routes.js';
-import { checkUser } from './middleware/auth.middleware.js';
 // centralized logger provides consistent formatting
 
 async function main() {
