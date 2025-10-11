@@ -79,12 +79,18 @@ router.post('/chunk', upload.single('chunk'), async (req, res) => {
 // GET /api/ingest/recordings - list all recordings (newest first)
 router.post('/recordings', async (req, res) => {
   try {
-    const {uid} = req.body;
+    const { uid } = (req.body ?? {}) as { uid?: string };
     if (!uid) return res.status(400).json({ message: 'uid is required' });
-    const recordings = await Recording.find({uid}).sort({ createdAt: -1 }).lean();
+
+    const recordings = await Recording.find({ uid })
+      .sort({ createdAt: -1 })
+      .lean();
+
     return res.json(recordings);
   } catch (err: any) {
-    return res.status(500).json({ message: err?.message || 'Failed to fetch recordings' });
+    return res
+      .status(500)
+      .json({ message: err?.message || 'Failed to fetch recordings' });
   }
 });
 
