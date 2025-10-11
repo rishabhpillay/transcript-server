@@ -29,6 +29,7 @@ const AudioItemSchema = new Schema(
 
 const RecordingSchema = new Schema(
   {
+    uid: {type:String , ref: 'User', required: true},
     uploadId: { type: String, index: true, unique: true },
     audio: { type: [AudioItemSchema], default: [] },
     transcript: { type: [TranscriptSchema], default: [] },

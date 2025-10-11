@@ -6,6 +6,8 @@ import { env } from './config/env.js';
 import ingestRouter from './http/ingest.routes.js';
 import geminiRouter from './http/gemini.routes.js';
 
+import userRouter from './http/user.routes.js';
+import { checkUser } from './middleware/auth.middleware.js';
 // centralized logger provides consistent formatting
 
 async function main() {
@@ -20,8 +22,9 @@ async function main() {
     next();
   });
 
-  app.use('/api/ingest', ingestRouter);
-  app.use('/api/gemini', geminiRouter);
+  app.use('/api/ingest',checkUser, ingestRouter);
+  app.use('/api/gemini',checkUser, geminiRouter);
+  app.use('/api/user', userRouter);
 
   app.listen(env.PORT, () => {
     console.log(`HTTP server listening on ${env.PORT}`);

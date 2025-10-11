@@ -77,9 +77,10 @@ router.post('/chunk', upload.single('chunk'), async (req, res) => {
 });
 
 // GET /api/ingest/recordings - list all recordings (newest first)
-router.get('/recordings', async (_req, res) => {
+router.get('/recordings', async (req, res) => {
   try {
-    const recordings = await Recording.find({}).sort({ createdAt: -1 }).lean();
+    const { uid } = req.body;
+    const recordings = await Recording.find({uid}).sort({ createdAt: -1 }).lean();
     return res.json(recordings);
   } catch (err: any) {
     return res.status(500).json({ message: err?.message || 'Failed to fetch recordings' });

@@ -41,6 +41,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 import { z } from "zod";
 
 const metaSchema = z.object({
+  uid: z.string().min(1).optional(),
   uploadId: z.string().min(1).optional(),
   sequenceId: z.coerce.number().int().positive(),
   lastChunk: z.coerce.boolean().default(false),
@@ -61,8 +62,8 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded." });
     }
-
     const parsed = metaSchema.parse(req.body);
+    const uid = parsed.uid;
     const uploadId = parsed.uploadId ?? uuidv4();
     const sequenceId = parsed.sequenceId;
     const lastChunk = !!parsed.lastChunk;
@@ -77,6 +78,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     let rec = await Recording.findOne({ uploadId });
     if (!rec) {
       rec = await Recording.create({
+        uid,
         uploadId,
         audio: [],
         transcript: [],
@@ -150,6 +152,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
         action: rec.action || [],
         uploadId,
         isComplete: rec.isComplete,
+        uid: rec.uid,
       });
     }
 
@@ -161,6 +164,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
       summary: rec.summary,
       action: rec.action,
       isComplete: rec.isComplete,
+      uid: rec.uid,
     });
   } catch (err: any) {
     console.error("Chunk ingest error:", err);
