@@ -1,24 +1,27 @@
-import { Request, Response, NextFunction } from 'express';
-import User from '../models/User.js';
+import { Request, Response, NextFunction } from "express";
+import User from "../models/User.js";
 
-export const checkUser = async (req: Request, res: Response, next: NextFunction) => {
-const uid = req.user?.uid;   // <-- this is the Firebase UID
-console.log('req.user:', req.user);
-console.log('uid:', uid);
-  
+export const checkUser = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const uid = req.params;
+  console.log("req.user:", req.params);
+  console.log("uid:", uid);
 
   if (!uid) {
-    return res.status(400).json({ message: 'UID is required' });
+    return res.status(400).json({ message: "UID is required" });
   }
 
   try {
     const user = await User.findOne({ uid });
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: "User not found" });
     }
     next();
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: 'Server error' });
+    return res.status(500).json({ message: "Server error" });
   }
 };
