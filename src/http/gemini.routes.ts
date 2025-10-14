@@ -10,7 +10,7 @@ import Recording from "../models/Recording.js";
 import { uploadAudio } from "../services/cloudinary.js";
 import { mergeSummaries } from "../services/mergeSummaries.js";
 import { dedupeActions } from "../services/actions.js";
-import { diarizeSegmentsFromBuffer } from '../services/diarize.js';
+import { diarizeSegmentsFromBuffer } from "../services/diarize.js";
 const toInt = (val: any): number | undefined => {
   const num = parseInt(val, 10);
   return isNaN(num) ? undefined : num;
@@ -68,7 +68,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     const parsed = metaSchema.parse(req.body);
 
     const uid = parsed.uid;
-    if (!uid) return res.status(400).json({ message: 'uid is required' });
+    if (!uid) return res.status(400).json({ message: "uid is required" });
 
     const uploadId = parsed.uploadId ?? uuidv4();
     const sequenceId = parsed.sequenceId;
@@ -111,22 +111,27 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     });
 
     // 4) Write a temp file for Gemini (since generateFullTranscript expects a path)
-    tmpPath = path.join(
-      TMP_DIR,
-      `${uploadId}-${sequenceId}-${Date.now()}.bin`
-    );
+    tmpPath = path.join(TMP_DIR, `${uploadId}-${sequenceId}-${Date.now()}.bin`);
     await fs.writeFile(tmpPath, req.file.buffer);
 
     // 5) Transcribe + diarize this chunk
 
     const diarizeResult = await diarizeSegmentsFromBuffer(
-        { buffer: req.file.buffer, mimeType: req.file.mimetype },
-        { model: "nova-3", language: "en" }
-      );
+      { buffer: req.file.buffer, mimeType: req.file.mimetype },
+      { model: "nova-3", language: "en" }
+    );
 
     const TranscribeResult = await generateFullTranscript(tmpPath, geminiMime);
 
-    const mergedLines = mergeDiarization(diarizeResult.transcript, TranscribeResult.transcript);
+    console.log({
+      diarizeResult: diarizeResult.transcript,
+      TranscribeResult: TranscribeResult.transcript,
+    });
+
+    const mergedLines = mergeDiarization(
+      diarizeResult.transcript,
+      TranscribeResult.transcript
+    );
 
     // 6) Append transcript (tag with current sequence for traceability)
     rec.transcript.push(
@@ -142,10 +147,16 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     // 7) Merge running summary with current chunk summary (LLM merge)
     rec.summary =
-      (await mergeSummaries(rec.summary || "", TranscribeResult.summary || "")) || "";
+      (await mergeSummaries(
+        rec.summary || "",
+        TranscribeResult.summary || ""
+      )) || "";
 
     // 8) Accumulate actions; only dedupe at the end to save LLM calls
-    if (Array.isArray(TranscribeResult.action) && TranscribeResult.action.length) {
+    if (
+      Array.isArray(TranscribeResult.action) &&
+      TranscribeResult.action.length
+    ) {
       rec.action.push(...TranscribeResult.action);
     }
 
