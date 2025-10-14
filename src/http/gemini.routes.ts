@@ -10,6 +10,7 @@ import Recording from "../models/Recording.js";
 import { uploadAudio } from "../services/cloudinary.js";
 import { mergeSummaries } from "../services/mergeSummaries.js";
 import { dedupeActions } from "../services/actions.js";
+import { diarizeSegmentsFromBuffer } from '../services/diarize.js';
 const toInt = (val: any): number | undefined => {
   const num = parseInt(val, 10);
   return isNaN(num) ? undefined : num;
@@ -39,6 +40,7 @@ await fs.mkdir(TMP_DIR, { recursive: true });
 const upload = multer({ storage: multer.memoryStorage() });
 
 import { z } from "zod";
+import { mergeDiarization } from "../services/mergeDiarization.js";
 
 const metaSchema = z.object({
   uid: z.string().min(1).optional(),
@@ -116,11 +118,19 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     await fs.writeFile(tmpPath, req.file.buffer);
 
     // 5) Transcribe + diarize this chunk
-    const result = await generateFullTranscript(tmpPath, geminiMime);
+
+    const diarizeResult = await diarizeSegmentsFromBuffer(
+        { buffer: req.file.buffer, mimeType: req.file.mimetype },
+        { model: "nova-3", language: "en" }
+      );
+
+    const TranscribeResult = await generateFullTranscript(tmpPath, geminiMime);
+
+    const mergedLines = mergeDiarization(diarizeResult.transcript, TranscribeResult.transcript);
 
     // 6) Append transcript (tag with current sequence for traceability)
     rec.transcript.push(
-      ...result.transcript.map((t: any) => ({
+      ...mergedLines.map((t: any) => ({
         speaker: t.speaker,
         text: t.text,
         start_ms: t.start_ms,
@@ -132,11 +142,11 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     // 7) Merge running summary with current chunk summary (LLM merge)
     rec.summary =
-      (await mergeSummaries(rec.summary || "", result.summary || "")) || "";
+      (await mergeSummaries(rec.summary || "", TranscribeResult.summary || "")) || "";
 
     // 8) Accumulate actions; only dedupe at the end to save LLM calls
-    if (Array.isArray(result.action) && result.action.length) {
-      rec.action.push(...result.action);
+    if (Array.isArray(TranscribeResult.action) && TranscribeResult.action.length) {
+      rec.action.push(...TranscribeResult.action);
     }
 
     // 9) Mark complete on final chunk + dedupe actions once
