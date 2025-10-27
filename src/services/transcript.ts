@@ -25,6 +25,7 @@ const DIARIZATION_SCHEMA = {
       },
     },
     summary: { type: "string" },
+    title: { type: "string" },
     action: { type: "array", items: { type: "string" } },
   },
   required: ["transcript", "summary", "action"],
@@ -72,6 +73,7 @@ export async function generateFullTranscript(
     notes: string;
   }>;
   summary: string;
+  title: string;
   action: string[];
 }> {
   if (!process.env.GEMINI_API_KEY) {
@@ -142,6 +144,8 @@ You are given an audio/video file. Produce:
 2) A concise SUMMARY in ENGLISH (2–4 sentences, crisp and neutral).
 
 3) ACTION items in ENGLISH (imperative, concrete, short).
+
+4) A short, descriptive meeting TITLE in ENGLISH (max 12 words, no trailing punctuation).
 
 General rules:
 - Segment transcript into ~5–20s utterances (longer is fine if uninterrupted).

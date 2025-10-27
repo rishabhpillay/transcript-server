@@ -124,8 +124,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     const TranscribeResult = await generateFullTranscript(tmpPath, geminiMime);
 
     console.log({
-      diarizeResult: diarizeResult.transcript,
-      TranscribeResult: TranscribeResult.transcript,
+      TranscribeResult: TranscribeResult,
     });
 
     const mergedLines = mergeDiarization(
