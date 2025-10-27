@@ -26,9 +26,8 @@ const DIARIZATION_SCHEMA = {
     },
     summary: { type: "string" },
     action: { type: "array", items: { type: "string" } },
-    title: { type: "string" },
   },
-  required: ["transcript", "summary", "action", "title"],
+  required: ["transcript", "summary", "action"],
   additionalProperties: false,
 } as const;
 
@@ -74,7 +73,6 @@ export async function generateFullTranscript(
   }>;
   summary: string;
   action: string[];
-  title: string;
 }> {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is not set in the .env file.");
@@ -145,8 +143,6 @@ You are given an audio/video file. Produce:
 
 3) ACTION items in ENGLISH (imperative, concrete, short).
 
-4) A short, descriptive meeting TITLE in ENGLISH (max 12 words, no trailing punctuation).
-
 General rules:
 - Segment transcript into ~5–20s utterances (longer is fine if uninterrupted).
 - Speakers labeled "Speaker 1", "Speaker 2", ...; keep consistent by voice.
@@ -187,20 +183,12 @@ General rules:
     if (
       !parsed ||
       typeof parsed !== "object" ||
-      !Array.isArray(parsed.transcript) ||
-      typeof parsed.summary !== "string" ||
-      typeof parsed.title !== "string" ||
-      !Array.isArray(parsed.action)
+      !Array.isArray(parsed.transcript)
     ) {
       throw new Error("Model did not return the expected JSON structure.");
     }
 
-    return {
-      transcript: parsed.transcript,
-      summary: parsed.summary,
-      action: parsed.action,
-      title: parsed.title,
-    };
+    return parsed;
   } finally {
     if (uploadedName) {
       try {

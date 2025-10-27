@@ -8,7 +8,7 @@ import { generateFullTranscript } from "../services/transcript.js";
 import { v4 as uuidv4 } from "uuid";
 import Recording from "../models/Recording.js";
 import { uploadAudio } from "../services/cloudinary.js";
-import { mergeTitleAndSummary } from "../services/mergeSummaries.js";
+import { mergeSummaries } from "../services/mergeSummaries.js";
 import { dedupeActions } from "../services/actions.js";
 import { diarizeSegmentsFromBuffer } from "../services/diarize.js";
 const toInt = (val: any): number | undefined => {
@@ -92,7 +92,6 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
         action: [],
         speakers: [],
         isComplete: false,
-        title:"",
       });
     }
 
@@ -147,16 +146,11 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     );
 
     // 7) Merge running summary with current chunk summary (LLM merge)
-    
-      const mergeTitleAndSummaryresult = await mergeTitleAndSummary(
-        "AI Trends in 2025",
-        "AI adoption is growing in multiple industries.",
-        "Latest Developments in Artificial Intelligence",
-        "Recent advances show AI is becoming integral to daily operations and creative fields."
-      );
-
-      rec.summary = mergeTitleAndSummaryresult.summary
-      rec.title = mergeTitleAndSummaryresult.title
+    rec.summary =
+      (await mergeSummaries(
+        rec.summary || "",
+        TranscribeResult.summary || ""
+      )) || "";
 
     // 8) Accumulate actions; only dedupe at the end to save LLM calls
     if (
@@ -184,7 +178,6 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
         uploadId,
         isComplete: rec.isComplete,
         uid: rec.uid,
-        title: rec.title,
       });
     }
 
@@ -197,7 +190,6 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
       action: rec.action,
       isComplete: rec.isComplete,
       uid: rec.uid,
-      title: rec.title
     });
   } catch (err: any) {
     console.error("Chunk ingest error:", err);
