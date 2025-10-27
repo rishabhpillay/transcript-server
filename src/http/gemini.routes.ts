@@ -92,7 +92,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
         action: [],
         speakers: [],
         isComplete: false,
-        title:""
+        title: "",
       });
     }
 
@@ -146,13 +146,6 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     );
 
     // 7) Merge running summary with current chunk summary (LLM merge)
-
-    // rec.summary =
-    //   (await mergeSummaries(
-    //     rec.summary || "",
-    //     TranscribeResult.summary || ""
-    //   )) || "";
-
     const mergeTitleAndSummaryResult = await mergeTitleAndSummary({
       previousTitle: TranscribeResult.title,
       previousSummary: rec.summary,
@@ -160,15 +153,9 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
       newSummary: TranscribeResult.summary,
     });
 
-  console.log({previousTitle: TranscribeResult.title,
-  previousSummary: rec.summary,
-  newTitle: TranscribeResult.title,
-  newSummary: TranscribeResult.summary,});
+    rec.summary = mergeTitleAndSummaryResult.summary;
+    rec.title = mergeTitleAndSummaryResult.title;
 
-  console.log({mergeTitleAndSummaryResult});
-    
-rec.summary = mergeTitleAndSummaryResult.summary
-rec.title = mergeTitleAndSummaryResult.summary
     // 8) Accumulate actions; only dedupe at the end to save LLM calls
     if (
       Array.isArray(TranscribeResult.action) &&
