@@ -33,6 +33,7 @@ const RecordingSchema = new Schema(
     uploadId: { type: String, index: true, unique: true },
     audio: { type: [AudioItemSchema], default: [] },
     transcript: { type: [TranscriptSchema], default: [] },
+    title: { type: String, default: '' },
     summary: { type: String, default: '' },
     action: { type: [String], default: [] },
     speakers: { type: [String], default: [] },
@@ -42,4 +43,3 @@ const RecordingSchema = new Schema(
 );
 
 export default model('Recording', RecordingSchema);
-
