@@ -8,7 +8,7 @@ import { generateFullTranscript } from "../services/transcript.js";
 import { v4 as uuidv4 } from "uuid";
 import Recording from "../models/Recording.js";
 import { uploadAudio } from "../services/cloudinary.js";
-import { mergeSummaries } from "../services/mergeSummaries.js";
+import { mergeTitleAndSummary } from "../services/mergeTitleAndSummary.js";
 import { dedupeActions } from "../services/actions.js";
 import { diarizeSegmentsFromBuffer } from "../services/diarize.js";
 const toInt = (val: any): number | undefined => {
@@ -92,6 +92,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
         action: [],
         speakers: [],
         isComplete: false,
+        title:""
       });
     }
 
@@ -145,12 +146,29 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     );
 
     // 7) Merge running summary with current chunk summary (LLM merge)
-    rec.summary =
-      (await mergeSummaries(
-        rec.summary || "",
-        TranscribeResult.summary || ""
-      )) || "";
 
+    // rec.summary =
+    //   (await mergeSummaries(
+    //     rec.summary || "",
+    //     TranscribeResult.summary || ""
+    //   )) || "";
+
+    const mergeTitleAndSummaryResult = await mergeTitleAndSummary({
+      previousTitle: TranscribeResult.title,
+      previousSummary: rec.summary,
+      newTitle: TranscribeResult.title,
+      newSummary: TranscribeResult.summary,
+    });
+
+  console.log({previousTitle: TranscribeResult.title,
+  previousSummary: rec.summary,
+  newTitle: TranscribeResult.title,
+  newSummary: TranscribeResult.summary,});
+
+  console.log({mergeTitleAndSummaryResult});
+    
+rec.summary = mergeTitleAndSummaryResult.summary
+rec.title = mergeTitleAndSummaryResult.summary
     // 8) Accumulate actions; only dedupe at the end to save LLM calls
     if (
       Array.isArray(TranscribeResult.action) &&
@@ -177,6 +195,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
         uploadId,
         isComplete: rec.isComplete,
         uid: rec.uid,
+        title: rec.title,
       });
     }
 
@@ -189,6 +208,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
       action: rec.action,
       isComplete: rec.isComplete,
       uid: rec.uid,
+      title: rec.title,
     });
   } catch (err: any) {
     console.error("Chunk ingest error:", err);

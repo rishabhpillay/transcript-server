@@ -37,6 +37,7 @@ const RecordingSchema = new Schema(
     action: { type: [String], default: [] },
     speakers: { type: [String], default: [] },
     isComplete: { type: Boolean, default: false },
+    title: { type: String, default: "" },
   },
   { timestamps: true }
 );
