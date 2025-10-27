@@ -9,7 +9,6 @@ const MODEL_NAME = "gemini-2.5-flash";
 const DIARIZATION_SCHEMA = {
   type: "object",
   properties: {
-    title: { type: "string" },
     transcript: {
       type: "array",
       items: {
@@ -28,7 +27,7 @@ const DIARIZATION_SCHEMA = {
     summary: { type: "string" },
     action: { type: "array", items: { type: "string" } },
   },
-  required: ["title", "transcript", "summary", "action"],
+  required: ["transcript", "summary", "action"],
   additionalProperties: false,
 } as const;
 
@@ -65,7 +64,6 @@ export async function generateFullTranscript(
   filePath: string,
   mimeType: string
 ): Promise<{
-  title: string;
   transcript: Array<{
     speaker: string;
     text: string;
@@ -134,15 +132,16 @@ export async function generateFullTranscript(
     // - action: short list of concrete next steps; imperative phrasing.
     // - Return ONLY valid JSON matching the provided schema. No markdown or prose outside JSON.
     // `.trim();
-const promptText = `
-You are given an audio/video file. Produce JSON with the following fields:
-1) title — An English title (≤8 words) that captures the main topic/participants/outcome. No quotes.
-2) transcript — A diarized transcript in HINDLISH (Hindi + English mixed) using ROMAN script only (no Devanagari).
+    const promptText = `
+You are given an audio/video file. Produce:
+1) A diarized transcript in HINDLISH (Hindi + English mixed) using ROMAN script only (no Devanagari).
    - Example style: "kal 3 PM ko meeting fix karte hain", "client ko follow-up email bhejna hai".
    - Keep technical terms/product names/acronyms in English (e.g., API, SSO, Cloudinary).
    - Use clear punctuation; numbers/times in Arabic numerals (0–9).
-3) summary — A concise ENGLISH summary (2–4 sentences, crisp and neutral).
-4) action — ACTION items in ENGLISH (imperative, concrete, short).
+
+2) A concise SUMMARY in ENGLISH (2–4 sentences, crisp and neutral).
+
+3) ACTION items in ENGLISH (imperative, concrete, short).
 
 General rules:
 - Segment transcript into ~5–20s utterances (longer is fine if uninterrupted).

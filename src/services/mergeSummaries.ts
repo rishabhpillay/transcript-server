@@ -1,16 +1,6 @@
 // services/mergeSummaries.ts
 import { GoogleGenAI } from "@google/genai";
 
-type SummaryMergeInput = {
-  summary?: string | null;
-  title?: string | null;
-};
-
-type SummaryMergeResult = {
-  summary: string;
-  title: string;
-};
-
 /**
  * Simple sleep utility
  */
@@ -43,7 +33,7 @@ async function withRetries<T>(fn: () => Promise<T>, label: string, attempts = 3)
  * - de-duplicates (case-insensitive)
  * - joins back in a sensible order
  */
-function deterministicSummary(prev: string, current: string): string {
+function deterministicMerge(prev: string, current: string): string {
   const text = [prev, current].filter(Boolean).join(" ");
   const sentences = text
     .split(/(?<=[.!?])\s+/)
@@ -63,106 +53,44 @@ function deterministicSummary(prev: string, current: string): string {
   return deduped.join(" ");
 }
 
-function deriveTitleFromSummary(summary: string): string {
-  if (!summary) return "";
-  const firstSentence = summary.split(/(?<=[.!?])\s+/).find(Boolean);
-  if (!firstSentence) return "";
-  return firstSentence
-    .replace(/["“”]/g, "")
-    .slice(0, 80)
-    .trim();
-}
-
-function deterministicTitle(prev: string, current: string, mergedSummary: string): string {
-  const a = prev.trim();
-  const b = current.trim();
-  if (a && !b) return a;
-  if (!a && b) return b;
-  if (!a && !b) return deriveTitleFromSummary(mergedSummary);
-  const lowerA = a.toLowerCase();
-  const lowerB = b.toLowerCase();
-  if (lowerA === lowerB) return a;
-  if (lowerA.includes(lowerB)) return a;
-  if (lowerB.includes(lowerA)) return b;
-  return `${a} / ${b}`.slice(0, 80);
-}
-
 const MODEL_NAME = "gemini-2.5-flash";
-const MERGE_SCHEMA = {
-  type: "object",
-  properties: {
-    summary: { type: "string" },
-    title: { type: "string" },
-  },
-  required: ["summary", "title"],
-  additionalProperties: false,
-} as const;
 
 /**
  * Merge two summaries into a single concise, non-redundant summary
  * while preserving all factual details.
  *
- * @param prev    { summary, title } for Summary A (earlier/running)
- * @param current { summary, title } for Summary B (new chunk)
- * @returns Merged summary + title
+ * @param prev    Summary A (earlier/running)
+ * @param current Summary B (new chunk)
+ * @returns Merged summary text
  */
-export async function mergeSummaries(
-  prev: SummaryMergeInput,
-  current: SummaryMergeInput
-): Promise<SummaryMergeResult> {
-  const summaryA = (prev.summary || "").trim();
-  const summaryB = (current.summary || "").trim();
-  const titleA = (prev.title || "").trim();
-  const titleB = (current.title || "").trim();
-
-  const fallback = () => {
-    const summary =
-      summaryA && summaryB
-        ? deterministicSummary(summaryA, summaryB)
-        : summaryA || summaryB;
-    const title = deterministicTitle(titleA, titleB, summary);
-    return { summary: summary || "", title: title || "" };
-  };
+export async function mergeSummaries(prev: string, current: string): Promise<string> {
+  const a = (prev || "").trim();
+  const b = (current || "").trim();
 
   // Quick exits
-  if (!summaryA && !summaryB) {
-    return { summary: "", title: deterministicTitle(titleA, titleB, "") };
-  }
-  if (!summaryA) {
-    return {
-      summary: summaryB,
-      title: titleB || deterministicTitle(titleA, "", summaryB),
-    };
-  }
-  if (!summaryB) {
-    return {
-      summary: summaryA,
-      title: titleA || deterministicTitle("", titleB, summaryA),
-    };
-  }
+  if (!a && !b) return "";
+  if (!a) return b;
+  if (!b) return a;
 
   // If no API key, fall back to deterministic merge
   if (!process.env.GEMINI_API_KEY) {
-    return fallback();
+    return deterministicMerge(a, b);
   }
 
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
   const prompt = `
-You are given two partial transcript summaries with titles (A = earlier/running, B = newer chunk). Combine them into a single updated view.
+You are given two summaries (A = earlier, B = newer). Merge them into ONE concise summary that:
+- PRESERVES ALL factual details from A and B (do NOT drop unique info).
+- Removes redundancy and contradictions; if conflicts exist, prefer wording that encompasses both if possible.
+- Is neutral, specific, and readable.
+- 2–6 sentences max. No bullets. Return PLAIN TEXT only.
 
-Requirements:
-- Preserve every concrete detail that appears in either summary.
-- Remove redundancy and resolve conflicts by preferring wording that encompasses both perspectives.
-- Produce 2–6 sentences in neutral English.
-- Generate a single descriptive English title (≤8 words) that reflects the merged conversation so far.
-- Respond ONLY with JSON that matches this schema: { "summary": string, "title": string }.
+Summary A:
+${a}
 
-Summary A: ${summaryA || "(none provided)"}
-Title A: ${titleA || "(none provided)"}
-
-Summary B: ${summaryB || "(none provided)"}
-Title B: ${titleB || "(none provided)"}
+Summary B:
+${b}
 `.trim();
 
   const resp = await withRetries(
@@ -172,31 +100,14 @@ Title B: ${titleB || "(none provided)"}
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: {
           temperature: 0.2,
-          responseMimeType: "application/json",
-          responseSchema: MERGE_SCHEMA,
+          responseMimeType: "text/plain",
         },
       }),
     "mergeSummaries"
   );
 
-  try {
-    // @ts-ignore — SDK returns .text
-    const mergedText = (resp?.text || "").trim();
-    const parsed = JSON.parse(mergedText);
-    if (
-      parsed &&
-      typeof parsed.summary === "string" &&
-      typeof parsed.title === "string"
-    ) {
-      return {
-        summary: parsed.summary.trim(),
-        title: parsed.title.trim(),
-      };
-    }
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn("Failed to parse merged summary response, using fallback", err);
-  }
-
-  return fallback();
+  // @ts-ignore — SDK returns .text
+  const merged = (resp?.text || "").trim();
+  // Fallback to deterministic if the model returns nothing
+  return merged || deterministicMerge(a, b);
 }
