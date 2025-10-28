@@ -48,6 +48,7 @@ const metaSchema = z.object({
   sequenceId: z.coerce.number().int().positive(),
   lastChunk: z.coerce.boolean().default(false),
   mime: z.string().optional(),
+  totalDuration: z.string().optional(),
 });
 
 function normalizeMimeForGemini(m: string | undefined): string {
@@ -66,6 +67,10 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     }
 
     const parsed = metaSchema.parse(req.body);
+    
+    console.log(parsed);
+    console.log(parsed.totalDuration);
+    
 
     const uid = parsed.uid;
     if (!uid) return res.status(400).json({ message: "uid is required" });
