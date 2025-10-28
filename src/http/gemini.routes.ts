@@ -67,9 +67,6 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     }
 
     const parsed = metaSchema.parse(req.body);
-    
-    console.log(parsed.totalDuration);
-    console.log(parsed.totalDuration);
 
     const uid = parsed.uid;
     if (!uid) return res.status(400).json({ message: "uid is required" });
@@ -155,6 +152,8 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     rec.summary = mergeTitleAndSummaryResult.summary;
     rec.title = mergeTitleAndSummaryResult.title;
+    console.log(parsed.totalDuration);
+    rec.totalDuration = parsed.totalDuration || rec.totalDuration;
 
     // 8) Accumulate actions; only dedupe at the end to save LLM calls
     if (
@@ -168,10 +167,6 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     if (lastChunk) {
       rec.isComplete = true;
       rec.action = await dedupeActions(rec.action);
-      if (parsed.totalDuration) {
-        console.log(parsed.totalDuration);
-        rec.totalDuration = parsed?.totalDuration;
-      }
     }
 
     await rec.save();
