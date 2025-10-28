@@ -67,10 +67,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     }
 
     const parsed = metaSchema.parse(req.body);
-    
-    console.log(parsed);
-    console.log(parsed.totalDuration);
-    
+
 
     const uid = parsed.uid;
     if (!uid) return res.status(400).json({ message: "uid is required" });
@@ -129,10 +126,6 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     const TranscribeResult = await generateFullTranscript(tmpPath, geminiMime);
 
-    console.log({
-      TranscribeResult: TranscribeResult,
-    });
-
     const mergedLines = mergeDiarization(
       diarizeResult.transcript,
       TranscribeResult.transcript
@@ -173,6 +166,9 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     if (lastChunk) {
       rec.isComplete = true;
       rec.action = await dedupeActions(rec.action);
+      if (parsed.totalDuration) {
+        rec.totalDuration = parsed?.totalDuration;
+      }
     }
 
     await rec.save();
