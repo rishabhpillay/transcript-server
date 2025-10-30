@@ -41,6 +41,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 import { z } from "zod";
 import { mergeDiarization } from "../services/mergeDiarization.js";
+import { speakerDiarize } from "../services/speakerDiarize.js";
+import { mergeSegmentsWithTranscript } from "../services/mergeSegmentsWithTranscript.js";
 
 const metaSchema = z.object({
   uid: z.string().min(1).optional(),
@@ -118,25 +120,45 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     // 5) Transcribe + diarize this chunk
 
-    const diarizeResult = await diarizeSegmentsFromBuffer(
-      { buffer: req.file.buffer, mimeType: req.file.mimetype },
-      { model: "nova-3", language: "en" }
-    );
+    // const diarizeResult = await diarizeSegmentsFromBuffer(
+    //   { buffer: req.file.buffer, mimeType: req.file.mimetype },
+    //   { model: "nova-3", language: "en" }
+    // );
+    const fileBuffer = await fs.readFile(req.file.path);
+
+    const out = await speakerDiarize({
+      uploadId,
+      sequenceId,
+      isFinal: lastChunk,
+      audio: {
+        buffer: fileBuffer,
+        mime: geminiMime, // prefer normalized mime
+        originalName: req.file.originalname,
+      },
+    });
+
+
 
     const TranscribeResult = await generateFullTranscript(tmpPath, geminiMime);
 
-    const mergedLines = mergeDiarization(
-      diarizeResult.transcript,
-      TranscribeResult.transcript
-    );
+    const segments = out?.ok ? out.segments : [];
+    const transcript = TranscribeResult?.transcript || [];
+
+    const merged = mergeSegmentsWithTranscript(segments, transcript);
+
+    // const mergedLines = mergeDiarization(
+    //   diarizeResult.transcript,
+    //   TranscribeResult.transcript
+    // );
 
     // 6) Append transcript (tag with current sequence for traceability)
     rec.transcript.push(
-      ...mergedLines.map((t: any) => ({
-        speaker: t.speaker,
+      // ...mergedLines.map((t: any) => ({
+        ...merged.map((t: any) => ({
+        speaker: t.speakerLabel,
         text: t.text,
-        start_ms: t.start_ms,
-        end_ms: t.end_ms,
+        start_ms: t.start,
+        end_ms: t.end,
         notes: t.notes,
         sq: sequenceId,
       }))

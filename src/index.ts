@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import ingestRouter from './http/ingest.routes.js';
 import geminiRouter from './http/gemini.routes.js';
 import recordingRouter from './http/recording.routes.js';
+import testRouter from './http/test.routes.js';
 
 import userRouter from './http/user.routes.js';
 // centralized logger provides consistent formatting
@@ -26,6 +27,7 @@ async function main() {
   app.use('/api/gemini', geminiRouter);
   app.use('/api/user', userRouter);
   app.use('/api/recording', recordingRouter);
+  app.use("/api/test", testRouter);
 
   app.listen(env.PORT, () => {
     console.log(`HTTP server listening on ${env.PORT}`);

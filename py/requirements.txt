@@ -1,0 +1,16 @@
+numpy==1.26.4
+librosa>=0.10.2
+soundfile>=0.12.1
+audioread>=3.0.1
+
+huggingface_hub==0.25.2
+
+torch==2.4.1
+torchaudio==2.4.1
+
+pyannote.audio==3.1.1
+pyannote.core>=5.0.0
+pyannote.metrics>=3.2.1
+pyannote.pipeline>=3.0.1
+
+speechbrain>=1.0.0

@@ -27,7 +27,17 @@ temp/
 # Editor/IDE
 .vscode/
 .idea/
+.history/
 
 # Coverage
 coverage/
 
+# Python virtualenvs and cache
+.venv/
+py/.venv/
+py/__pycache__/
+
+# Generated assets & temp data
+# data/
+tmp_uploads/
+tsconfig.tsbuildinfo
