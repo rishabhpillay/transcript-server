@@ -120,12 +120,8 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     // 5) Transcribe + diarize this chunk
 
-    // const diarizeResult = await diarizeSegmentsFromBuffer(
-    //   { buffer: req.file.buffer, mimeType: req.file.mimetype },
-    //   { model: "nova-3", language: "en" }
-    // );
-    const fileBuffer = await fs.readFile(req.file.path);
-
+    // When using Multer memoryStorage there is no file path; the buffer is in memory
+    const fileBuffer = req.file.buffer;
     const out = await speakerDiarize({
       uploadId,
       sequenceId,
