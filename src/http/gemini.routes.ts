@@ -43,6 +43,7 @@ import { z } from "zod";
 import { mergeDiarization } from "../services/mergeDiarization.js";
 import { speakerDiarize } from "../services/speakerDiarize.js";
 import { mergeSegmentsWithTranscript } from "../services/mergeSegmentsWithTranscript.js";
+import { notifyDiscord } from "../utils/notifyDiscord.js";
 
 const metaSchema = z.object({
   uid: z.string().min(1).optional(),
@@ -83,6 +84,18 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     const cloudinaryMime = rawMime; // what Cloudinary sees
     const geminiMime = normalizeMimeForGemini(rawMime); // what Gemini sees
 
+    await notifyDiscord({
+      type: "info",
+      title: "upload-chunk api call ",
+      step: "received",
+      meta: {
+        uploadId : parsed.uploadId,
+        sequenceId,
+        lastChunk,
+        mime: rawMime,
+      },
+    });
+
     // 1) Find or create the recording document
     let rec = await Recording.findOne({ uploadId });
     if (!rec) {
@@ -122,6 +135,14 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     // When using Multer memoryStorage there is no file path; the buffer is in memory
     const fileBuffer = req.file.buffer;
+
+    await notifyDiscord({
+      type: "info",
+      title: "upload-chunk",
+      step: "Diarize",
+      message: "Diarize start"
+    });
+
     const out = await speakerDiarize({
       uploadId,
       sequenceId,
@@ -133,14 +154,52 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
       },
     });
 
+    const segments = out?.ok ? out.segments : [];
 
+    await notifyDiscord({
+      type: "info",      
+      title: "upload-chunk",
+      step: "Diarize",
+      message: "Diarize response",
+      meta: {
+        segments
+      }
+    });
+
+    await notifyDiscord({
+      type: "info",
+      title: "upload-chunk",
+      step: "Transcribe",
+      message: "Transcribe start"
+    });
 
     const TranscribeResult = await generateFullTranscript(tmpPath, geminiMime);
 
-    const segments = out?.ok ? out.segments : [];
+
     const transcript = TranscribeResult?.transcript || [];
 
+    await notifyDiscord({
+      type: "info",      
+      title: "upload-chunk",
+      step: "Transcribe",
+      message: "Transcribe response",
+      meta: {
+        transcript
+      }
+    });
+
+
     const merged = mergeSegmentsWithTranscript(segments, transcript);
+
+    await notifyDiscord({
+      type: "info",      
+      title: "upload-chunk",
+      step: "mergeSegmentsWithTranscript",
+      message: "merged response",
+      meta: {
+        merged
+      }
+    });
 
     // const mergedLines = mergeDiarization(
     //   diarizeResult.transcript,
@@ -200,6 +259,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
         isComplete: rec.isComplete,
         uid: rec.uid,
         title: rec.title,
+        totalDuration: rec.totalDuration
       });
     }
 
@@ -213,6 +273,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
       isComplete: rec.isComplete,
       uid: rec.uid,
       title: rec.title,
+      totalDuration: rec.totalDuration
     });
   } catch (err: any) {
     console.error("Chunk ingest error:", err);
