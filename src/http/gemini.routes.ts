@@ -41,6 +41,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 import { z } from "zod";
 import { mergeDiarization } from "../services/mergeDiarization.js";
+import { notifyDiscord } from "../utils/notifyDiscord.js";
 
 const metaSchema = z.object({
   uid: z.string().min(1).optional(),
@@ -74,12 +75,20 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     const uploadId = parsed.uploadId ?? uuidv4();
     const sequenceId = parsed.sequenceId;
     const lastChunk = !!parsed.lastChunk;
+    const totalDuration = parsed.totalDuration;
 
     /* capture raw client mime, then derive two mimes */
     const rawMime =
       req.file.mimetype || parsed.mime || "application/octet-stream";
     const cloudinaryMime = rawMime; // what Cloudinary sees
     const geminiMime = normalizeMimeForGemini(rawMime); // what Gemini sees
+
+    notifyDiscord({
+      type: "info",
+      title: "upload-chunk",
+      message: "api start",
+      meta: { uid, uploadId, sequenceId, lastChunk, rawMime, geminiMime, totalDuration},
+    });
 
     // 1) Find or create the recording document
     let rec = await Recording.findOne({ uploadId });
@@ -118,21 +127,34 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     // 5) Transcribe + diarize this chunk
 
-    const diarizeResult = await diarizeSegmentsFromBuffer(
-      { buffer: req.file.buffer, mimeType: req.file.mimetype },
-      { model: "nova-3", language: "en" }
-    );
+    // const diarizeResult = await diarizeSegmentsFromBuffer(
+    //   { buffer: req.file.buffer, mimeType: req.file.mimetype },
+    //   { model: "nova-3", language: "en" }
+    // );
+
+    notifyDiscord({
+      type: "info",
+      title: "upload-chunk",
+      message: "Transcribe start",
+    });
 
     const TranscribeResult = await generateFullTranscript(tmpPath, geminiMime);
 
-    const mergedLines = mergeDiarization(
-      diarizeResult.transcript,
-      TranscribeResult.transcript
-    );
+    notifyDiscord({
+      type: "info",
+      title: "upload-chunk",
+      message: "TranscribeResult result",
+      meta: { transcript:TranscribeResult.transcript },
+    });
+
+    // const mergedLines = mergeDiarization(
+    //   diarizeResult.transcript,
+    //   TranscribeResult.transcript
+    // );
 
     // 6) Append transcript (tag with current sequence for traceability)
     rec.transcript.push(
-      ...mergedLines.map((t: any) => ({
+      ...TranscribeResult.transcript.map((t: any) => ({
         speaker: t.speaker,
         text: t.text,
         start_ms: t.start_ms,
@@ -170,6 +192,22 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     }
 
     await rec.save();
+
+    notifyDiscord({
+      type: "info",
+      title: "upload-chunk",
+      message: "response",
+      meta: {       
+        success: true,
+        uploadId,
+        sequenceId,
+        text: rec.transcript,
+        summary: rec.summary,
+        action: rec.action,
+        isComplete: rec.isComplete,
+        uid: rec.uid,
+        title: rec.title, },
+    });
 
     // 10) Respond
     if (lastChunk) {
