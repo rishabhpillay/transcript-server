@@ -47,7 +47,7 @@ const metaSchema = z.object({
   uid: z.string().min(1).optional(),
   uploadId: z.string().min(1).optional(),
   sequenceId: z.coerce.number().int().positive(),
-  lastChunk: z.coerce.boolean().default(false),
+  lastChunk: z.coerce.string(),
   mime: z.string().optional(),
   totalDuration: z.string().optional(),
 });
@@ -74,7 +74,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     const uploadId = parsed.uploadId ?? uuidv4();
     const sequenceId = parsed.sequenceId;
-    const lastChunk = !!parsed.lastChunk;
+    const lastChunk = parsed.lastChunk === "true";
     const totalDuration = parsed.totalDuration;
 
     /* capture raw client mime, then derive two mimes */
@@ -187,7 +187,6 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     if (lastChunk) {
       rec.isComplete = true;
       rec.action = await dedupeActions(rec.action);
-      console.log(parsed.totalDuration);
       rec.totalDuration = parsed.totalDuration || "";
     }
 

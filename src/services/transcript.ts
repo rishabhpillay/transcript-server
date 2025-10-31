@@ -28,7 +28,7 @@ const DIARIZATION_SCHEMA = {
     title: { type: "string" },
     action: { type: "array", items: { type: "string" } },
   },
-  required: ["transcript", "summary", "action"],
+  required: ["transcript", "summary", "title", "action"],
   additionalProperties: false,
 } as const;
 
@@ -134,7 +134,29 @@ export async function generateFullTranscript(
     // - action: short list of concrete next steps; imperative phrasing.
     // - Return ONLY valid JSON matching the provided schema. No markdown or prose outside JSON.
     // `.trim();
-    const promptText = `
+//     const promptText = `
+// You are given an audio/video file. Produce:
+// 1) A diarized transcript in HINDLISH (Hindi + English mixed) using ROMAN script only (no Devanagari).
+//    - Example style: "kal 3 PM ko meeting fix karte hain", "client ko follow-up email bhejna hai".
+//    - Keep technical terms/product names/acronyms in English (e.g., API, SSO, Cloudinary).
+//    - Use clear punctuation; numbers/times in Arabic numerals (0–9).
+
+// 2) A concise SUMMARY in ENGLISH (2–4 sentences, crisp and neutral).
+
+// 3) ACTION items in ENGLISH (imperative, concrete, short).
+
+// 4) A short, descriptive meeting TITLE in ENGLISH (max 12 words, no trailing punctuation).
+
+// General rules:
+// - Segment transcript into ~5–20s utterances (longer is fine if uninterrupted).
+// - Speakers labeled "Speaker 1", "Speaker 2", ...; keep consistent by voice.
+// - Use millisecond offsets from media start: start_ms, end_ms.
+// - notes: non-speech events (e.g., [laughter], [music]), acronym expansions, or key context; else "".
+// - Return ONLY valid JSON matching the provided schema. No markdown or prose outside JSON.
+// `.trim();
+
+
+const promptText = `
 You are given an audio/video file. Produce:
 1) A diarized transcript in HINDLISH (Hindi + English mixed) using ROMAN script only (no Devanagari).
    - Example style: "kal 3 PM ko meeting fix karte hain", "client ko follow-up email bhejna hai".
@@ -148,12 +170,20 @@ You are given an audio/video file. Produce:
 4) A short, descriptive meeting TITLE in ENGLISH (max 12 words, no trailing punctuation).
 
 General rules:
+- **CRITICAL:** If the audio is silent, empty, or contains only noise (no human speech), you MUST return this exact JSON object:
+  {
+    "transcript": [],
+    "summary": "No speech detected in the audio.",
+    "title": "No Speech Detected",
+    "action": []
+  }
 - Segment transcript into ~5–20s utterances (longer is fine if uninterrupted).
 - Speakers labeled "Speaker 1", "Speaker 2", ...; keep consistent by voice.
 - Use millisecond offsets from media start: start_ms, end_ms.
 - notes: non-speech events (e.g., [laughter], [music]), acronym expansions, or key context; else "".
 - Return ONLY valid JSON matching the provided schema. No markdown or prose outside JSON.
 `.trim();
+
     console.log(`\nSending structured prompt to ${MODEL_NAME}...`);
 
     // IMPORTANT: Use a single content with role + parts
