@@ -49,7 +49,7 @@ const metaSchema = z.object({
   uid: z.string().min(1).optional(),
   uploadId: z.string().min(1).optional(),
   sequenceId: z.coerce.number().int().positive(),
-  lastChunk: z.coerce.boolean().default(false),
+  lastChunk: z.string(),
   mime: z.string().optional(),
   totalDuration: z.string().optional(),
 });
@@ -61,13 +61,14 @@ function normalizeMimeForGemini(m: string | undefined): string {
   return mime;
 }
 
-router.post("/upload-chunk", upload.single("file"), async (req, res) => {
+router.post("/upload-chunk", upload.any(), async (req, res) => {
   let tmpPath: string | null = null;
 
   try {
-    if (!req.file) {
+    if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "No file uploaded." });
     }
+    const file = (req.files as Express.Multer.File[])[0];
 
     const parsed = metaSchema.parse(req.body);
 
@@ -76,11 +77,11 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     const uploadId = parsed.uploadId ?? uuidv4();
     const sequenceId = parsed.sequenceId;
-    const lastChunk = !!parsed.lastChunk;
+    const lastChunk = parsed.lastChunk === "true";
 
     /* capture raw client mime, then derive two mimes */
     const rawMime =
-      req.file.mimetype || parsed.mime || "application/octet-stream";
+      file.mimetype || parsed.mime || "application/octet-stream";
     const cloudinaryMime = rawMime; // what Cloudinary sees
     const geminiMime = normalizeMimeForGemini(rawMime); // what Gemini sees
 
@@ -89,6 +90,8 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
       title: "upload-chunk api call ",
       step: "received",
       meta: {
+        files: req.files,
+        file_fieldname: file.fieldname,
         uploadId : parsed.uploadId,
         sequenceId,
         lastChunk,
@@ -113,7 +116,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     }
 
     // 2) Upload buffer to Cloudinary
-    const { publicId, secureUrl } = await uploadAudio(req.file.buffer, {
+    const { publicId, secureUrl } = await uploadAudio(file.buffer, {
       uploadId,
       sequenceId,
       mime: cloudinaryMime,
@@ -129,12 +132,12 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     // 4) Write a temp file for Gemini (since generateFullTranscript expects a path)
     tmpPath = path.join(TMP_DIR, `${uploadId}-${sequenceId}-${Date.now()}.bin`);
-    await fs.writeFile(tmpPath, req.file.buffer);
+    await fs.writeFile(tmpPath, file.buffer);
 
     // 5) Transcribe + diarize this chunk
 
     // When using Multer memoryStorage there is no file path; the buffer is in memory
-    const fileBuffer = req.file.buffer;
+    const fileBuffer = file.buffer;
 
     await notifyDiscord({
       type: "info",
@@ -150,7 +153,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
       audio: {
         buffer: fileBuffer,
         mime: geminiMime, // prefer normalized mime
-        originalName: req.file.originalname,
+        originalName: file.originalname,
       },
     });
 
@@ -273,7 +276,10 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
       isComplete: rec.isComplete,
       uid: rec.uid,
       title: rec.title,
-      totalDuration: rec.totalDuration
+      totalDuration: rec.totalDuration,
+      segments: segments,
+      transcript: transcript,
+
     });
   } catch (err: any) {
     console.error("Chunk ingest error:", err);
