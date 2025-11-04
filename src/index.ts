@@ -9,6 +9,7 @@ import recordingRouter from './http/recording.routes.js';
 import testRouter from './http/test.routes.js';
 
 import userRouter from './http/user.routes.js';
+import healthRouter from './http/health.routes.js';
 // centralized logger provides consistent formatting
 
 async function main() {
@@ -28,6 +29,7 @@ async function main() {
   app.use('/api/user', userRouter);
   app.use('/api/recording', recordingRouter);
   app.use("/api/test", testRouter);
+  app.use("/api/health", healthRouter);
 
   app.listen(env.PORT, () => {
     console.log(`HTTP server listening on ${env.PORT}`);
