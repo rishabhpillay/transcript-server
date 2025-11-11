@@ -1,7 +1,7 @@
 import path from "path";
 import fs from "fs-extra";
 import { spawn } from "node:child_process";
-import { DATA_ROOT, DIARIZE_SCRIPT, PYTHON_BIN, HF_TOKEN } from "../config/config.js";
+import { DATA_ROOT, DIARIZE_SCRIPT, PYTHON_BIN, HF_TOKEN } from "../../config/config.js";
 
 export type DiarizeChunkResult = {
   ok: boolean;

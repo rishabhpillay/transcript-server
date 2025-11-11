@@ -16,19 +16,17 @@ const DIARIZATION_SCHEMA = {
         properties: {
           speaker: { type: "string" },
           text: { type: "string" },
-          start: { type: "float" },
-          end: { type: "float" },
+          // seconds as floating-point numbers
+          start: { type: "number" },
+          end: { type: "number" },
           notes: { type: "string" },
         },
         required: ["speaker", "text", "start", "end", "notes"],
         additionalProperties: false,
       },
     },
-    summary: { type: "string" },
-    title: { type: "string" },
-    action: { type: "array", items: { type: "string" } },
   },
-  required: ["transcript", "summary", "title", "action"],
+  required: ["transcript"],
   additionalProperties: false,
 } as const;
 
@@ -41,7 +39,7 @@ async function withRetries<T>(
   fn: () => Promise<T>,
   label: string,
   attempts = 3
-) {
+): Promise<T> {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -50,9 +48,7 @@ async function withRetries<T>(
       lastErr = err;
       const delay = 1000 * Math.pow(2, i); // 1s, 2s, 4s
       console.warn(
-        `${label} failed (attempt ${
-          i + 1
-        }/${attempts}). Retrying in ${delay}ms…`,
+        `${label} failed (attempt ${i + 1}/${attempts}). Retrying in ${delay}ms…`,
         err
       );
       await sleep(delay);
@@ -61,7 +57,7 @@ async function withRetries<T>(
   throw lastErr;
 }
 
-export async function generateFullTranscript(
+export async function generateTranscript(
   filePath: string,
   mimeType: string
 ): Promise<{
@@ -72,9 +68,6 @@ export async function generateFullTranscript(
     end: number;
     notes: string;
   }>;
-  summary: string;
-  title: string;
-  action: string[];
 }> {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error("GEMINI_API_KEY is not set in the .env file.");
@@ -123,35 +116,27 @@ export async function generateFullTranscript(
     console.log("File is ready (ACTIVE) for model use. ✅");
 
     const promptText = `
-You are given an audio/video file. Produce:
+You are given an audio/video file. Produce ONLY:
+
 1) A diarized transcript in HINDLISH (Hindi + English mixed) using ROMAN script only (no Devanagari).
    - Example style: "kal 3 PM ko meeting fix karte hain", "client ko follow-up email bhejna hai".
    - Keep technical terms/product names/acronyms in English (e.g., API, SSO, Cloudinary).
    - Use clear punctuation; numbers/times in Arabic numerals (0–9).
 
-2) A concise SUMMARY in ENGLISH (2–4 sentences, crisp and neutral).
-
-3) ACTION items in ENGLISH (imperative, concrete, short).
-
-4) A short, descriptive meeting TITLE in ENGLISH (max 12 words, no trailing punctuation).
-
 General rules:
 - **CRITICAL:** If the audio is silent, empty, or contains only noise (no human speech), you MUST return this exact JSON object:
   {
-    "transcript": [],
-    "summary": "No speech detected in the audio.",
-    "title": "No Speech Detected",
-    "action": []
+    "transcript": []
   }
 - Segment transcript into ~5–20s utterances (longer is fine if uninterrupted).
 - Speakers labeled "Speaker 1", "Speaker 2", ...; keep consistent by voice.
-- Use SECOND offsets from media start: start, end (e.g., 12.3, 45.0).
-- notes: non-speech events (e.g., [laughter], [music]), acronym expansions, or key context; else "".
+- Use SECOND offsets from media start: "start" and "end" (e.g., 12.3, 45.0).
+- "notes": non-speech events (e.g., [laughter], [music]), acronym expansions, or key context; else "".
 - Return ONLY valid JSON matching the provided schema. No markdown or prose outside JSON.
 `.trim();
+
     console.log(`\nSending structured prompt to ${MODEL_NAME}...`);
 
-    // IMPORTANT: Use a single content with role + parts
     const response = await withRetries(
       () =>
         ai.models.generateContent({
@@ -165,7 +150,6 @@ General rules:
               ],
             },
           ],
-          // Correct key is "config"
           config: {
             temperature: 0.2,
             responseMimeType: "application/json",
@@ -175,8 +159,10 @@ General rules:
       "generateContent"
     );
 
-    const raw = response.text;
-    const parsed = JSON.parse(raw || "");
+    // Be tolerant of SDK shape differences
+    // @ts-ignore
+    const raw = (response && response.text) || "";
+    const parsed = JSON.parse(raw || "{}");
 
     // quick shape check
     if (
@@ -187,7 +173,30 @@ General rules:
       throw new Error("Model did not return the expected JSON structure.");
     }
 
-    return parsed;
+    // Normalize transcript to ensure proper types and seconds-based timestamps
+    const transcript = parsed.transcript.map((item: any) => {
+      const hasSeconds =
+        typeof item.start === "number" && typeof item.end === "number";
+      const hasMs =
+        typeof item.start_ms === "number" && typeof item.end_ms === "number";
+
+      const start = hasSeconds
+        ? item.start
+        : hasMs
+        ? item.start_ms / 1000
+        : 0;
+      const end = hasSeconds ? item.end : hasMs ? item.end_ms / 1000 : 0;
+
+      return {
+        speaker: String(item.speaker ?? ""),
+        text: String(item.text ?? ""),
+        start,
+        end,
+        notes: typeof item.notes === "string" ? item.notes : "",
+      };
+    });
+
+    return { transcript };
   } finally {
     if (uploadedName) {
       try {

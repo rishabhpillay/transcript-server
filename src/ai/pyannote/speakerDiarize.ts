@@ -2,9 +2,9 @@
 import path from "path";
 import fs from "fs-extra";
 
-import { DATA_ROOT, KEEP_FILES, SPEAKER_MATCH_THRESHOLD } from "../config/config.js";
-import { cosineSimilarity } from "../utils/math.js";
-import { getSession, clearSession, SpeakerEntry, ChunkResult } from "../utils/speakerStore.js";
+import { DATA_ROOT, KEEP_FILES, SPEAKER_MATCH_THRESHOLD } from "../../config/config.js";
+import { cosineSimilarity } from "../../utils/math.js";
+import { getSession, clearSession, SpeakerEntry, ChunkResult } from "../../utils/speakerStore.js";
 import { diarizeFile } from "./processChunk.js";
 
 /** Input can be a Buffer or a path on disk */
@@ -157,8 +157,8 @@ export async function speakerDiarize(params: {
     }
 
     const segmentsWithSeq = segs.map((s) => ({
-      start: s.start,
-      end: s.end,
+      start: Number(s.start.toFixed(1)),
+      end: Number(s.end.toFixed(1)),
       speakerLabel: s.speakerLabel,
       seq: labelToSeq.get(s.speakerLabel)!,
     }));

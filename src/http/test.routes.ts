@@ -4,7 +4,7 @@ import multer from "multer";
 import path from "path";
 import { z } from "zod";
 import { DATA_ROOT } from "../config/config.js";
-import { speakerDiarize } from "../services/speakerDiarize.js";
+import { speakerDiarize } from "../ai/pyannote/speakerDiarize.js";
 import fs from "fs-extra";
 import { generateFullTranscript } from "../services/transcript.js";
 import { mergeSegmentsWithTranscript } from "../services/mergeSegmentsWithTranscript.js";

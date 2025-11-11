@@ -8,8 +8,8 @@ type Segment = {
   type TranscriptItem = {
     speaker: string;
     text: string;
-    start_ms: number;
-    end_ms: number;
+    start: number;
+    end: number;
     notes?: string;
   };
   
@@ -31,8 +31,8 @@ type Segment = {
     const segs = [...segments].sort((a, b) => a.start - b.start);
     const trs = [...transcript]
       .filter(t => t.text?.trim())
-      .sort((a, b) => a.start_ms - b.start_ms)
-      .map(t => ({ ...t, start_s: t.start_ms / 1000, end_s: t.end_ms / 1000 }));
+      .sort((a, b) => a.start - b.start)
+      .map(t => ({ ...t, start_s: t.start / 1000, end_s: t.end / 1000 }));
   
     const results: Array<Segment & { text: string }> = [];
   

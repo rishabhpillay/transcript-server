@@ -41,9 +41,12 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 import { z } from "zod";
 import { mergeDiarization } from "../services/mergeDiarization.js";
-import { speakerDiarize } from "../services/speakerDiarize.js";
+import { speakerDiarize } from "../ai/pyannote/speakerDiarize.js";
 import { mergeSegmentsWithTranscript } from "../services/mergeSegmentsWithTranscript.js";
 import { notifyDiscord } from "../utils/notifyDiscord.js";
+import { mergeTranscriptWithSegments } from "../services/mergeTranscriptWithSegments.js";
+import { generateTranscript } from "../ai/gemini/transcript.js";
+import { generateOrUpdateSummaryFromTranscript } from "../ai/gemini/generateOrUpdateSummaryFromTranscript.js";
 
 const metaSchema = z.object({
   uid: z.string().min(1).optional(),
@@ -146,7 +149,7 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
       message: "Diarize start"
     });
 
-    const out = await speakerDiarize({
+    const diarizeOut = await speakerDiarize({
       uploadId,
       sequenceId,
       isFinal: lastChunk,
@@ -157,7 +160,7 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
       },
     });
 
-    const segments = out?.ok ? out.segments : [];
+    const segments = diarizeOut?.ok ? diarizeOut.segments : [];
 
     await notifyDiscord({
       type: "info",      
@@ -169,17 +172,15 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
       }
     });
 
+    // 6) Transcribe this chunk with Gemini
     await notifyDiscord({
       type: "info",
       title: "upload-chunk",
       step: "Transcribe",
       message: "Transcribe start"
     });
-
-    const TranscribeResult = await generateFullTranscript(tmpPath, geminiMime);
-
-
-    const transcript = TranscribeResult?.transcript || [];
+    
+    const { transcript } = await generateTranscript(tmpPath, geminiMime);
 
     await notifyDiscord({
       type: "info",      
@@ -191,8 +192,8 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
       }
     });
 
-
-    const merged = mergeSegmentsWithTranscript(segments, transcript);
+    // 7) Merge diarization segments with transcript speakers
+    const { transcript: merged }= mergeTranscriptWithSegments( transcript, segments );
 
     await notifyDiscord({
       type: "info",      
@@ -204,16 +205,10 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
       }
     });
 
-    // const mergedLines = mergeDiarization(
-    //   diarizeResult.transcript,
-    //   TranscribeResult.transcript
-    // );
-
-    // 6) Append transcript (tag with current sequence for traceability)
-    rec.transcript.push(
-      // ...mergedLines.map((t: any) => ({
+     // 8) Append merged transcript to recording (tag with current sequence)
+     rec.transcript.push(
         ...merged.map((t: any) => ({
-        speaker: t.speakerLabel,
+        speaker: t.speaker,
         text: t.text,
         start_ms: t.start,
         end_ms: t.end,
@@ -222,36 +217,75 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
       }))
     );
 
-    // 7) Merge running summary with current chunk summary (LLM merge)
-    const mergeTitleAndSummaryResult = await mergeTitleAndSummary({
-      previousTitle: TranscribeResult.title,
-      previousSummary: rec.summary,
-      newTitle: TranscribeResult.title,
-      newSummary: TranscribeResult.summary,
-    });
+    // 9) Generate / update summary + title + action from transcript
+    let summary: string = rec.summary || "";
+    let title: string = rec.title || "";
+    let action: string[] = Array.isArray(rec.action) ? rec.action : [];
 
-    rec.summary = mergeTitleAndSummaryResult.summary;
-    rec.title = mergeTitleAndSummaryResult.title;
-
-    // 8) Accumulate actions; only dedupe at the end to save LLM calls
-    if (
-      Array.isArray(TranscribeResult.action) &&
-      TranscribeResult.action.length
-    ) {
-      rec.action.push(...TranscribeResult.action);
+    if (sequenceId === 1 && !rec.summary) {
+      // first chunk for this upload: fresh summary
+      const result = await generateOrUpdateSummaryFromTranscript({
+        transcript: merged,
+      });
+      summary = result.summary;
+      title = result.title;
+      action = result.action;
+    } else {
+      // subsequent chunks: merge with previous summary data
+      const result = await generateOrUpdateSummaryFromTranscript({
+        transcript: merged,
+        previousSummary: {
+          summary: rec.summary || "",
+          title: rec.title || "",
+          action: Array.isArray(rec.action) ? rec.action : [],
+        },
+      });
+      summary = result.summary;
+      title = result.title;
+      action = result.action;
     }
 
-    // 9) Mark complete on final chunk + dedupe actions once
+    // const mergedLines = mergeDiarization(
+    //   diarizeResult.transcript,
+    //   TranscribeResult.transcript
+    // );
+
+   
+
+    // 7) Merge running summary with current chunk summary (LLM merge)
+    // const mergeTitleAndSummaryResult = await mergeTitleAndSummary({
+    //   previousTitle: TranscribeResult.title,
+    //   previousSummary: rec.summary,
+    //   newTitle: TranscribeResult.title,
+    //   newSummary: TranscribeResult.summary,
+    // });
+
+    // 10) Update summary/title/action on the recording
+    rec.summary = summary;
+    rec.title = title;
+    rec.action = action;
+
+    // rec.summary = mergeTitleAndSummaryResult.summary;
+    // rec.title = mergeTitleAndSummaryResult.title;
+
+    // 8) Accumulate actions; only dedupe at the end to save LLM calls
+    // if (
+    //   Array.isArray(TranscribeResult.action) &&
+    //   TranscribeResult.action.length
+    // ) {
+    //   rec.action.push(...TranscribeResult.action);
+    // }
+
+    // 11) Mark complete on final chunk
     if (lastChunk) {
       rec.isComplete = true;
-      rec.action = await dedupeActions(rec.action);
       console.log(parsed.totalDuration);
       rec.totalDuration = parsed.totalDuration || "";
     }
 
     await rec.save();
 
-    // 10) Respond
+    // 12) Respond
     if (lastChunk) {
       return res.json({
         text: rec.transcript,
