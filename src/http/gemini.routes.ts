@@ -42,6 +42,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 import { z } from "zod";
 import { mergeDiarization } from "../services/mergeDiarization.js";
 import { notifyDiscord } from "../utils/notifyDiscord.js";
+import { generateTranscript } from "../ai/gemini/generateTranscript.js";
+import { generateOrUpdateSummaryFromTranscript } from "../ai/gemini/generateOrUpdateSummaryFromTranscript.js";
 
 const metaSchema = z.object({
   uid: z.string().min(1).optional(),
@@ -59,13 +61,14 @@ function normalizeMimeForGemini(m: string | undefined): string {
   return mime;
 }
 
-router.post("/upload-chunk", upload.single("file"), async (req, res) => {
+router.post("/upload-chunk", upload.any(), async (req, res) => {
   let tmpPath: string | null = null;
 
   try {
-    if (!req.file) {
+    if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "No file uploaded." });
     }
+    const file = (req.files as Express.Multer.File[])[0];
 
     const parsed = metaSchema.parse(req.body);
 
@@ -75,19 +78,25 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     const uploadId = parsed.uploadId ?? uuidv4();
     const sequenceId = parsed.sequenceId;
     const lastChunk = parsed.lastChunk === "true";
-    const totalDuration = parsed.totalDuration;
 
     /* capture raw client mime, then derive two mimes */
     const rawMime =
-      req.file.mimetype || parsed.mime || "application/octet-stream";
+      file.mimetype || parsed.mime || "application/octet-stream";
     const cloudinaryMime = rawMime; // what Cloudinary sees
     const geminiMime = normalizeMimeForGemini(rawMime); // what Gemini sees
 
-    notifyDiscord({
+    await notifyDiscord({
       type: "info",
-      title: "upload-chunk",
-      message: "api start",
-      meta: { uid, uploadId, sequenceId, lastChunk, rawMime, geminiMime, totalDuration},
+      title: "upload-chunk api call ",
+      step: "received",
+      meta: {
+        files: req.files,
+        file_fieldname: file.fieldname,
+        uploadId : parsed.uploadId,
+        sequenceId,
+        lastChunk,
+        mime: rawMime,
+      },
     });
 
     // 1) Find or create the recording document
@@ -107,7 +116,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
     }
 
     // 2) Upload buffer to Cloudinary
-    const { publicId, secureUrl } = await uploadAudio(req.file.buffer, {
+    const { publicId, secureUrl } = await uploadAudio(file.buffer, {
       uploadId,
       sequenceId,
       mime: cloudinaryMime,
@@ -123,92 +132,157 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
 
     // 4) Write a temp file for Gemini (since generateFullTranscript expects a path)
     tmpPath = path.join(TMP_DIR, `${uploadId}-${sequenceId}-${Date.now()}.bin`);
-    await fs.writeFile(tmpPath, req.file.buffer);
+    await fs.writeFile(tmpPath, file.buffer);
 
     // 5) Transcribe + diarize this chunk
 
-    // const diarizeResult = await diarizeSegmentsFromBuffer(
-    //   { buffer: req.file.buffer, mimeType: req.file.mimetype },
-    //   { model: "nova-3", language: "en" }
-    // );
+    // When using Multer memoryStorage there is no file path; the buffer is in memory
+    const fileBuffer = file.buffer;
 
-    notifyDiscord({
+    // await notifyDiscord({
+    //   type: "info",
+    //   title: "upload-chunk",
+    //   step: "Diarize",
+    //   message: "Diarize start"
+    // });
+
+    // const diarizeOut = await speakerDiarize({
+    //   uploadId,
+    //   sequenceId,
+    //   isFinal: lastChunk,
+    //   audio: {
+    //     buffer: fileBuffer,
+    //     mime: geminiMime, // prefer normalized mime
+    //     originalName: file.originalname,
+    //   },
+    // });
+
+    // const segments = diarizeOut?.ok ? diarizeOut.segments : [];
+
+    // await notifyDiscord({
+    //   type: "info",      
+    //   title: "upload-chunk",
+    //   step: "Diarize",
+    //   message: "Diarize response",
+    //   meta: {
+    //     segments
+    //   }
+    // });
+
+    // 6) Transcribe this chunk with Gemini
+    await notifyDiscord({
       type: "info",
       title: "upload-chunk",
-      message: "Transcribe start",
+      step: "Transcribe",
+      message: "Transcribe start"
     });
+    
+    const { transcript } = await generateTranscript(tmpPath, geminiMime);
 
-    const TranscribeResult = await generateFullTranscript(tmpPath, geminiMime);
-
-    notifyDiscord({
-      type: "info",
+    await notifyDiscord({
+      type: "info",      
       title: "upload-chunk",
-      message: "TranscribeResult result",
-      meta: { transcript:TranscribeResult.transcript },
+      step: "Transcribe",
+      message: "Transcribe response",
+      meta: {
+        transcript
+      }
     });
+
+    // 7) Merge diarization segments with transcript speakers
+    // const { transcript: merged }= mergeTranscriptWithSegments( transcript, segments );
+
+    // await notifyDiscord({
+    //   type: "info",      
+    //   title: "upload-chunk",
+    //   step: "mergeSegmentsWithTranscript",
+    //   message: "merged response",
+    //   meta: {
+    //     merged
+    //   }
+    // });
+
+     // 8) Append merged transcript to recording (tag with current sequence)
+     rec.transcript.push(
+        ...transcript.map((t: any) => ({
+        speaker: t.speaker,
+        text: t.text,
+        start_ms: t.start,
+        end_ms: t.end,
+        notes: t.notes,
+        sq: sequenceId,
+      }))
+    );
+
+    // 9) Generate / update summary + title + action from transcript
+    let summary: string = rec.summary || "";
+    let title: string = rec.title || "";
+    let action: string[] = Array.isArray(rec.action) ? rec.action : [];
+
+    if (sequenceId === 1 && !rec.summary) {
+      // first chunk for this upload: fresh summary
+      const result = await generateOrUpdateSummaryFromTranscript({
+        transcript,
+      });
+      summary = result.summary;
+      title = result.title;
+      action = result.action;
+    } else {
+      // subsequent chunks: merge with previous summary data
+      const result = await generateOrUpdateSummaryFromTranscript({
+        transcript,
+        previousSummary: {
+          summary: rec.summary || "",
+          title: rec.title || "",
+          action: Array.isArray(rec.action) ? rec.action : [],
+        },
+      });
+      summary = result.summary;
+      title = result.title;
+      action = result.action;
+    }
 
     // const mergedLines = mergeDiarization(
     //   diarizeResult.transcript,
     //   TranscribeResult.transcript
     // );
 
-    // 6) Append transcript (tag with current sequence for traceability)
-    rec.transcript.push(
-      ...TranscribeResult.transcript.map((t: any) => ({
-        speaker: t.speaker,
-        text: t.text,
-        start_ms: t.start_ms,
-        end_ms: t.end_ms,
-        notes: t.notes,
-        sq: sequenceId,
-      }))
-    );
+   
 
     // 7) Merge running summary with current chunk summary (LLM merge)
-    const mergeTitleAndSummaryResult = await mergeTitleAndSummary({
-      previousTitle: TranscribeResult.title,
-      previousSummary: rec.summary,
-      newTitle: TranscribeResult.title,
-      newSummary: TranscribeResult.summary,
-    });
+    // const mergeTitleAndSummaryResult = await mergeTitleAndSummary({
+    //   previousTitle: TranscribeResult.title,
+    //   previousSummary: rec.summary,
+    //   newTitle: TranscribeResult.title,
+    //   newSummary: TranscribeResult.summary,
+    // });
 
-    rec.summary = mergeTitleAndSummaryResult.summary;
-    rec.title = mergeTitleAndSummaryResult.title;
+    // 10) Update summary/title/action on the recording
+    rec.summary = summary;
+    rec.title = title;
+    rec.action = action;
+
+    // rec.summary = mergeTitleAndSummaryResult.summary;
+    // rec.title = mergeTitleAndSummaryResult.title;
 
     // 8) Accumulate actions; only dedupe at the end to save LLM calls
-    if (
-      Array.isArray(TranscribeResult.action) &&
-      TranscribeResult.action.length
-    ) {
-      rec.action.push(...TranscribeResult.action);
-    }
+    // if (
+    //   Array.isArray(TranscribeResult.action) &&
+    //   TranscribeResult.action.length
+    // ) {
+    //   rec.action.push(...TranscribeResult.action);
+    // }
 
-    // 9) Mark complete on final chunk + dedupe actions once
+    // 11) Mark complete on final chunk
     if (lastChunk) {
       rec.isComplete = true;
-      rec.action = await dedupeActions(rec.action);
+      console.log(parsed.totalDuration);
       rec.totalDuration = parsed.totalDuration || "";
     }
 
     await rec.save();
 
-    notifyDiscord({
-      type: "info",
-      title: "upload-chunk",
-      message: "response",
-      meta: {       
-        success: true,
-        uploadId,
-        sequenceId,
-        text: rec.transcript,
-        summary: rec.summary,
-        action: rec.action,
-        isComplete: rec.isComplete,
-        uid: rec.uid,
-        title: rec.title, },
-    });
-
-    // 10) Respond
+    // 12) Respond
     if (lastChunk) {
       return res.json({
         text: rec.transcript,
@@ -219,6 +293,7 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
         isComplete: rec.isComplete,
         uid: rec.uid,
         title: rec.title,
+        totalDuration: rec.totalDuration
       });
     }
 
@@ -232,6 +307,10 @@ router.post("/upload-chunk", upload.single("file"), async (req, res) => {
       isComplete: rec.isComplete,
       uid: rec.uid,
       title: rec.title,
+      totalDuration: rec.totalDuration,
+      // segments: segments,
+      // transcript: transcript,
+
     });
   } catch (err: any) {
     console.error("Chunk ingest error:", err);
