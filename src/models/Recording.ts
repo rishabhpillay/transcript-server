@@ -35,6 +35,8 @@ const RecordingSchema = new Schema(
     transcript: { type: [TranscriptSchema], default: [] },
     summary: { type: String, default: '' },
     action: { type: [String], default: [] },
+    todo: { type: [String], default: [] },
+    done: { type: [String], default: [] },
     speakers: { type: [String], default: [] },
     isComplete: { type: Boolean, default: false },
     title: { type: String, default: "" },
@@ -44,4 +46,3 @@ const RecordingSchema = new Schema(
 );
 
 export default model('Recording', RecordingSchema);
-
