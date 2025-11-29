@@ -52,6 +52,8 @@ const metaSchema = z.object({
   lastChunk: z.coerce.string(),
   mime: z.string().optional(),
   totalDuration: z.string().optional(),
+  templateMode: z.enum(["summary_action", "todo_done"]).optional(),
+  templatePrompt: z.string().max(4000).optional(),
 });
 
 function normalizeMimeForGemini(m: string | undefined): string {
@@ -78,6 +80,10 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
     const uploadId = parsed.uploadId ?? uuidv4();
     const sequenceId = parsed.sequenceId;
     const lastChunk = parsed.lastChunk === "true";
+    const templateMode = parsed.templateMode;
+    const templatePrompt = parsed.templatePrompt;
+
+    // If frontend does not send a prompt, backend will fall back to built-in guidelines.
 
     /* capture raw client mime, then derive two mimes */
     const rawMime =
@@ -109,6 +115,8 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
         transcript: [],
         summary: "",
         action: [],
+        todo: [],
+        done: [],
         speakers: [],
         isComplete: false,
         title: "",
@@ -215,18 +223,29 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
     );
 
     // 9) Generate / update summary + title + action from transcript
+    const includeTodoDone = templateMode === "todo_done";
+
     let summary: string = rec.summary || "";
     let title: string = rec.title || "";
     let action: string[] = Array.isArray(rec.action) ? rec.action : [];
+    let todo: string[] = Array.isArray((rec as any).todo) ? (rec as any).todo : [];
+    let done: string[] = Array.isArray((rec as any).done) ? (rec as any).done : [];
 
     if (sequenceId === 1 && !rec.summary) {
       // first chunk for this upload: fresh summary
       const result = await generateOrUpdateSummaryFromTranscript({
         transcript,
+        templateMode,
+        templatePrompt,
       });
-      summary = result.summary;
-      title = result.title;
-      action = result.action;
+      if (templateMode === "todo_done") {
+        todo = Array.isArray((result as any).todo) ? (result as any).todo : [];
+        done = Array.isArray((result as any).done) ? (result as any).done : [];
+      } else {
+        summary = (result as any).summary;
+        title = (result as any).title;
+        action = Array.isArray((result as any).action) ? (result as any).action : [];
+      }
     } else {
       // subsequent chunks: merge with previous summary data
       const result = await generateOrUpdateSummaryFromTranscript({
@@ -236,10 +255,17 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
           title: rec.title || "",
           action: Array.isArray(rec.action) ? rec.action : [],
         },
+        templateMode,
+        templatePrompt,
       });
-      summary = result.summary;
-      title = result.title;
-      action = result.action;
+      if (templateMode === "todo_done") {
+        todo = Array.isArray((result as any).todo) ? (result as any).todo : [];
+        done = Array.isArray((result as any).done) ? (result as any).done : [];
+      } else {
+        summary = (result as any).summary;
+        title = (result as any).title;
+        action = Array.isArray((result as any).action) ? (result as any).action : [];
+      }
     }
 
     // const mergedLines = mergeDiarization(
@@ -261,6 +287,8 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
     rec.summary = summary;
     rec.title = title;
     rec.action = action;
+    (rec as any).todo = todo;
+    (rec as any).done = done;
 
     // rec.summary = mergeTitleAndSummaryResult.summary;
     // rec.title = mergeTitleAndSummaryResult.title;
@@ -293,7 +321,8 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
         isComplete: rec.isComplete,
         uid: rec.uid,
         title: rec.title,
-        totalDuration: rec.totalDuration
+        totalDuration: rec.totalDuration,
+        ...(includeTodoDone ? { todo: (rec as any).todo, done: (rec as any).done } : {}),
       });
     }
 
@@ -308,6 +337,7 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
       uid: rec.uid,
       title: rec.title,
       totalDuration: rec.totalDuration,
+      ...(includeTodoDone ? { todo: (rec as any).todo, done: (rec as any).done } : {}),
       // segments: segments,
       // transcript: transcript,
 
