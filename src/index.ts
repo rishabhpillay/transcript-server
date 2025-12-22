@@ -10,11 +10,16 @@ import recordingRouter from './http/recording.routes.js';
 import userRouter from './http/user.routes.js';
 // centralized logger provides consistent formatting
 
+import { requestLogger } from './middleware/requestLogger.js';
+
 async function main() {
   await initMongo();
   const app = express();
   app.use(cors({ origin: '*', credentials: true }));
   app.use(express.json({ limit: '5mb' }));
+
+  // Middleware for Logging & Discord Notifications
+  app.use(requestLogger);
 
   // Set a higher timeout for all requests (e.g., 10 minutes)
   app.use((req, res, next) => {
