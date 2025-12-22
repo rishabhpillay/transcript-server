@@ -1,4 +1,42 @@
-import { Schema, model } from 'mongoose';
+import { Schema, model, Document, Types } from 'mongoose';
+
+export interface ITranscript {
+  date_time?: string;
+  speaker?: string;
+  text?: string;
+  start_ms?: number;
+  end_ms?: number;
+  notes?: string;
+  sq?: number;
+}
+
+export interface IAudioItem {
+  sq?: number;
+  publicId?: string;
+  secureUrl?: string;
+  sequenceId?: number;
+  assetId?: string;
+  bytes?: number;
+  durationMs?: number;
+  format?: string;
+}
+
+export interface IRecording extends Document {
+  userId: Types.ObjectId;
+  uploadId?: string;
+  audio: IAudioItem[];
+  transcript: ITranscript[];
+  summary: string;
+  action: string[];
+  todo: string[];
+  done: string[];
+  speakers: string[];
+  isComplete: boolean;
+  title: string;
+  totalDuration: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 const TranscriptSchema = new Schema(
   {
@@ -27,9 +65,9 @@ const AudioItemSchema = new Schema(
   { _id: false }
 );
 
-const RecordingSchema = new Schema(
+const RecordingSchema = new Schema<IRecording>(
   {
-    uid: {type:String , ref: 'User', required: true},
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     uploadId: { type: String, index: true, unique: true },
     audio: { type: [AudioItemSchema], default: [] },
     transcript: { type: [TranscriptSchema], default: [] },
@@ -45,4 +83,4 @@ const RecordingSchema = new Schema(
   { timestamps: true }
 );
 
-export default model('Recording', RecordingSchema);
+export default model<IRecording>('Recording', RecordingSchema);

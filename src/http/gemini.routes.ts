@@ -46,7 +46,7 @@ import { generateTranscript } from "../ai/gemini/generateTranscript.js";
 import { generateOrUpdateSummaryFromTranscript } from "../ai/gemini/generateOrUpdateSummaryFromTranscript.js";
 
 const metaSchema = z.object({
-  uid: z.string().min(1).optional(),
+  userId: z.string().min(1).optional(),
   uploadId: z.string().min(1).optional(),
   sequenceId: z.coerce.number().int().positive(),
   lastChunk: z.coerce.string(),
@@ -74,8 +74,8 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
 
     const parsed = metaSchema.parse(req.body);
 
-    const uid = parsed.uid;
-    if (!uid) return res.status(400).json({ message: "uid is required" });
+    const userId = parsed.userId;
+    if (!userId) return res.status(400).json({ message: "userId is required" });
 
     const uploadId = parsed.uploadId ?? uuidv4();
     const sequenceId = parsed.sequenceId;
@@ -109,7 +109,7 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
     let rec = await Recording.findOne({ uploadId });
     if (!rec) {
       rec = await Recording.create({
-        uid,
+        userId,
         uploadId,
         audio: [],
         transcript: [],
@@ -319,7 +319,7 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
         action: rec.action || [],
         uploadId,
         isComplete: rec.isComplete,
-        uid: rec.uid,
+        userId: rec.userId,
         title: rec.title,
         totalDuration: rec.totalDuration,
         ...(includeTodoDone ? { todo: (rec as any).todo, done: (rec as any).done } : {}),
@@ -334,7 +334,7 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
       summary: rec.summary,
       action: rec.action,
       isComplete: rec.isComplete,
-      uid: rec.uid,
+      userId: rec.userId,
       title: rec.title,
       totalDuration: rec.totalDuration,
       ...(includeTodoDone ? { todo: (rec as any).todo, done: (rec as any).done } : {}),

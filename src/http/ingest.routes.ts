@@ -79,12 +79,12 @@ router.post('/chunk', upload.single('chunk'), async (req, res) => {
 // GET /api/ingest/recordings - list all recordings (newest first)
 router.post('/recordings', async (req, res) => {
   try {
-    const { uid } = (req.body ?? {}) as { uid?: string };
+    const { userId } = (req.body ?? {}) as { userId?: string };
     console.log({req});
     
-    if (!uid) return res.status(400).json({ message: 'uid is required' });
+    if (!userId) return res.status(400).json({ message: 'userId is required' });
 
-    const recordings = await Recording.find({ uid })
+    const recordings = await Recording.find({ userId })
       .sort({ createdAt: -1 })
       .lean();
 

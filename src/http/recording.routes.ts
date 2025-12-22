@@ -5,23 +5,23 @@ import Recording from '../models/Recording.js';
 const router = Router();
 
 type recordingsBody = {
-  uid?: string;
+  userId?: string;
 };
 
 // POST /user
 router.post("/get", async (req: Request<{}, {}, recordingsBody>, res: Response) => {
   try {
-    const { uid } = req.body || {};
-    console.log({body: req.body});
-    console.log({req: req});
+    const { userId } = req.body || {};
+    // console.log({body: req.body});
+    // console.log({req: req});
     
 
-    if (!uid) {
-      return res.status(400).json({ message: "uid is required" });
+    if (!userId) {
+      return res.status(400).json({ message: "userId is required" });
     }
 
-    // Look up by email (you could also key by Firebase uid)
-    const recordings = await Recording.find({ uid })
+    // Look up by userId
+    const recordings = await Recording.find({ userId })
     .sort({ createdAt: -1 })
     .lean();
 
