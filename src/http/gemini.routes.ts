@@ -241,6 +241,7 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
       if (templateMode === "todo_done") {
         todo = Array.isArray((result as any).todo) ? (result as any).todo : [];
         done = Array.isArray((result as any).done) ? (result as any).done : [];
+        title = (result as any).title;
       } else {
         summary = (result as any).summary;
         title = (result as any).title;
@@ -261,6 +262,7 @@ router.post("/upload-chunk", upload.any(), async (req, res) => {
       if (templateMode === "todo_done") {
         todo = Array.isArray((result as any).todo) ? (result as any).todo : [];
         done = Array.isArray((result as any).done) ? (result as any).done : [];
+        title = (result as any).title;
       } else {
         summary = (result as any).summary;
         title = (result as any).title;
